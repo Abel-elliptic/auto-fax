@@ -1,0 +1,23 @@
+# FAX自動送信 設定ファイル（例）
+# 本番では C:\FAX\設定\settings.toml にコピーして使う。
+
+[folders]
+base_dir = 'C:\FAX'
+# 相対パスはこのファイルの場所から見たパス
+master_file = 'master.csv'
+
+[scan]
+# ファイルが書き込み中でないか確かめるため、この秒数をおいてサイズ・更新時刻を2回比べる
+stable_wait_seconds = 3
+
+[render]
+# FAX用に画像化するときの解像度。実機で 200/300/400 を比べて決める
+dpi = 200
+# 用紙の各辺の余白(mm)
+margin_mm = 5
+# text = 文字向け（くっきり二値化） / photo = 写真向け（ディザ）
+mono_mode = 'text'
+# text モードのしきい値（0〜255。大きいほど薄い線が黒くなる）
+threshold = 160
+# PDFの用紙・向き: auto = PDFのページに合わせる / master = マスタの設定に合わせる
+pdf_layout = 'auto'
