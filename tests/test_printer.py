@@ -47,3 +47,28 @@ def test_settings_print_section(tmp_path):
     from pathlib import Path
     ex = load_settings(Path(__file__).parent.parent / "config" / "settings.example.toml")
     assert ex.mode == "demo" and ex.printer_name == "Microsoft Print to PDF"
+
+
+def test_format_inspection():
+    from faxjob.printer_win import Inspection, format_inspection
+    ins = Inspection(
+        printer="FUJIFILM Apeos C2360 FAX", driver="FF Direct Fax Driver", port="10.203.101.230",
+        default_paper=9, default_orientation=1, default_quality="200×200dpi",
+        papers=[(9, "A4", (2100, 2970)), (8, "A3", (2970, 4200)), (12, "B4", None)],
+        resolutions=[(200, 100), (200, 200)], landscape_rotation=90,
+        trials=[(Paper("A4", "縦"), 9, 1, ""), (Paper("A4", "横"), 9, 2, ""),
+                (Paper("A3", "縦"), 8, 1, ""), (Paper("A3", "横"), 9, 2, "")],
+    )
+    text = "\n".join(format_inspection(ins))
+    assert "FAXドライバー判定: はい" in text
+    assert "A4: 対応" in text and "A3: 対応" in text
+    assert "200×100、200×200" in text
+    assert "A3 横: → 用紙 A4 / 向き 横  ← 指定どおりにならない" in text
+    assert "要確認" in text.splitlines()[-1]
+
+
+def test_format_inspection_missing_a3():
+    from faxjob.printer_win import Inspection, format_inspection
+    ins = Inspection("P", "D", "X", None, None, "不明", [(9, "A4", None)], [], None, [])
+    text = "\n".join(format_inspection(ins))
+    assert "A3: 一覧に無い（要確認）" in text and "既定の設定: 用紙 不明" in text

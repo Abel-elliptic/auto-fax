@@ -159,3 +159,118 @@ def print_pages(printer: str, pages: list[RenderedPage], doc_name: str,
     finally:
         win32gui.DeleteDC(hdc)
     return results
+
+
+# ---- 調査（inspect）: 印刷ジョブを作らずにドライバーの対応状況を読む ----
+
+DC_PAPERS, DC_PAPERSIZE, DC_ENUMRESOLUTIONS, DC_PAPERNAMES, DC_ORIENTATION = 2, 3, 13, 16, 17
+PAPER_CODE_NAMES = {8: "A3", 9: "A4", 11: "A5", 12: "B4", 13: "B5", 1: "Letter", 5: "Legal"}
+ORIENT_NAMES = {1: "縦", 2: "横"}
+
+
+@dataclass
+class Inspection:
+    printer: str
+    driver: str
+    port: str
+    default_paper: int | None
+    default_orientation: int | None
+    default_quality: str
+    papers: list[tuple[int, str, tuple[int, int] | None]]   # (コード, 名前, 寸法0.1mm)
+    resolutions: list[tuple[int, int]]
+    landscape_rotation: int | None
+    trials: list[tuple[Paper, int | None, int | None, str]]  # 要求 → 受け入れ値(用紙コード, 向き), エラー
+
+
+def format_inspection(ins: Inspection) -> list[str]:
+    """調査結果を日本語の行にする（Windowsに依存しない部分。単体テスト対象）。"""
+    pname = lambda c: PAPER_CODE_NAMES.get(c, f"コード{c}") if c is not None else "不明"
+    lines = [
+        f"プリンター: {ins.printer}",
+        f"ドライバー: {ins.driver}",
+        f"ポート    : {ins.port}",
+        f"FAXドライバー判定: {'はい' if looks_like_fax(ins.printer, ins.driver) else 'いいえ'}",
+        f"既定の設定: 用紙 {pname(ins.default_paper)} / 向き {ORIENT_NAMES.get(ins.default_orientation, '不明')} / 解像度 {ins.default_quality}",
+        "",
+        f"対応用紙（{len(ins.papers)}種類）:",
+    ]
+    for code, name, size in ins.papers:
+        dims = f" {size[0] / 10:.0f}×{size[1] / 10:.0f}mm" if size else ""
+        mark = "  ← 使用" if code in (8, 9) else ""
+        lines.append(f"  [{code:>3}] {name}{dims}{mark}")
+    codes = {p[0] for p in ins.papers}
+    for code, label in ((9, "A4"), (8, "A3")):
+        lines.append(f"{label}: {'対応' if code in codes else '一覧に無い（要確認）'}")
+    res = "、".join(f"{x}×{y}" for x, y in ins.resolutions) or "取得できず"
+    lines.append(f"対応解像度(dpi): {res}")
+    rot = {0: "横向き非対応", 90: "対応（90°）", 270: "対応（270°）"}.get(ins.landscape_rotation, "不明")
+    lines.append(f"横向き: {rot}")
+    lines += ["", "用紙・向きの指定テスト（設定値をドライバーに渡して返ってきた値。印刷はしていない）:"]
+    ok_all = True
+    for paper, got_paper, got_orient, err in ins.trials:
+        if err:
+            lines.append(f"  {paper.label()}: エラー {err}")
+            ok_all = False
+            continue
+        ok = got_paper == DMPAPER[paper.size] and got_orient == DMORIENT[paper.orientation]
+        ok_all &= ok
+        lines.append(f"  {paper.label()}: → 用紙 {pname(got_paper)} / 向き {ORIENT_NAMES.get(got_orient, '不明')}  {'OK' if ok else '← 指定どおりにならない'}")
+    lines += ["", "判定: " + ("A4/A3・縦横の指定はドライバーに受け入れられた" if ok_all else "指定どおりにならない組み合わせがある（要確認）")]
+    return lines
+
+
+def inspect_printer(printer: str) -> Inspection:
+    """印刷ジョブを作らずに、プリンタードライバーの設定と対応状況を読む。FAXは送信されない。"""
+    import win32print
+
+    h = win32print.OpenPrinter(printer)
+    try:
+        info = win32print.GetPrinter(h, 2)
+    finally:
+        win32print.ClosePrinter(h)
+    port = info["pPortName"]
+    dm = info["pDevMode"]
+
+    def caps(cap):
+        try:
+            return win32print.DeviceCapabilities(printer, port, cap)
+        except Exception:
+            return None
+
+    codes = list(caps(DC_PAPERS) or [])
+    names = list(caps(DC_PAPERNAMES) or [])
+    sizes = list(caps(DC_PAPERSIZE) or [])
+    papers = []
+    for i, code in enumerate(codes):
+        name = names[i].strip("\x00 ") if i < len(names) else ""
+        size = None
+        if i < len(sizes):
+            s = sizes[i]
+            size = (s["x"], s["y"]) if isinstance(s, dict) else tuple(s)
+        papers.append((int(code), name, size))
+    res_raw = caps(DC_ENUMRESOLUTIONS) or []
+    resolutions = []
+    for r in res_raw:
+        resolutions.append((r["x"], r["y"]) if isinstance(r, dict) else tuple(r))
+    rot = caps(DC_ORIENTATION)
+
+    quality = "不明"
+    if dm is not None:
+        q, y = getattr(dm, "PrintQuality", 0), getattr(dm, "YResolution", 0)
+        quality = f"{q}×{y}dpi" if q > 0 else f"品質コード{q}"
+
+    trials = []
+    for paper in (Paper("A4", "縦"), Paper("A4", "横"), Paper("A3", "縦"), Paper("A3", "横")):
+        try:
+            got = _devmode_for(printer, paper)
+            trials.append((paper, got.PaperSize, got.Orientation, ""))
+        except Exception as exc:
+            trials.append((paper, None, None, str(exc)))
+
+    return Inspection(
+        printer=printer, driver=info["pDriverName"], port=port,
+        default_paper=getattr(dm, "PaperSize", None) if dm is not None else None,
+        default_orientation=getattr(dm, "Orientation", None) if dm is not None else None,
+        default_quality=quality, papers=papers, resolutions=resolutions,
+        landscape_rotation=rot if isinstance(rot, int) else None, trials=trials,
+    )

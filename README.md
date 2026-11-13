@@ -52,6 +52,17 @@ py -m faxjob print --printer "Microsoft Print to PDF" --input samples\送信 --m
 - FAXドライバーらしいプリンターを指定すると、`print.mode = 'test'` かつ `--allow-fax` の時以外は出力を拒否する。
 - ⚠ 「FUJIFILM Apeos C2360」（ドライバー FF Apeos C2360）は**紙に印刷するプリンター**。指定すると紙が出る（FAXは出ない）ので、Step 2 では指定しない。
 
+## FAXドライバーの調査（Windows、送信なし）
+
+ダイレクトファクスドライバー（例：プリンター名「FUJIFILM Apeos C2360 FAX」）の対応用紙・解像度・既定値を読み、
+A4/A3 × 縦/横 の指定をドライバーが受け入れるかを確認する。**印刷ジョブを作らないので、FAXは送信されない。**
+
+```
+py -m faxjob inspect --printer "FUJIFILM Apeos C2360 FAX"
+```
+
+結果は画面と `out\inspect.txt` に出る。
+
 ## スリープからの自動復帰テスト（Windows）
 
 このPCには従来のスリープ（S3）が無く、「モダンスタンバイ」と「休止状態」のみ。

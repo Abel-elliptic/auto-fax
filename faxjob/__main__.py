@@ -2,11 +2,13 @@
 
   python -m faxjob demo  [--settings 設定.toml] [--input フォルダ] [--master マスタ.csv] [--out 出力先]
   python -m faxjob print [--settings 設定.toml] [--printer プリンター名] [--only ファイル名] [--output-dir 出力先]
+  python -m faxjob inspect --printer プリンター名 [--out 結果ファイル]
 
 demo  は送信フォルダを読み、判定とFAX用ページ画像を作ってHTMLで表示する。FAXは送信しない。
 print は同じページ画像を、ページごとに用紙・向きを指定してプリンターへ出力する（Windowsのみ）。
       Step 2 では「Microsoft Print to PDF」に出力し、PDFで用紙・向き・余白を確認する。
       FAXドライバーらしいプリンターへの出力は、mode=test かつ --allow-fax の時だけ許可する。
+inspect はプリンタードライバーの対応用紙・解像度・用紙/向きの指定可否を読むだけ（印刷ジョブを作らない＝FAXは出ない）。
 """
 from __future__ import annotations
 
@@ -136,8 +138,28 @@ def cmd_print(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def cmd_inspect(args: argparse.Namespace) -> int:
+    if sys.platform != "win32":
+        print("inspect コマンドは Windows でのみ動きます", file=sys.stderr)
+        return 2
+    from .printer_win import format_inspection, inspect_printer
+
+    try:
+        ins = inspect_printer(args.printer)
+    except Exception as exc:
+        print(f"プリンター「{args.printer}」を調べられません: {exc}", file=sys.stderr)
+        return 2
+    text = "\n".join(["（読み取りのみ。印刷ジョブは作っていません＝FAXは送信されていません）", ""] + format_inspection(ins))
+    print(text)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text + "\n", encoding="utf-8")
+    print(f"\n結果: {out.resolve()}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="faxjob", description="FAX定期自動送信（開発中：demo と print のみ。定期送信は未実装）")
+    parser = argparse.ArgumentParser(prog="faxjob", description="FAX定期自動送信（開発中：demo / print / inspect のみ。定期送信は未実装）")
     sub = parser.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("demo", help="送信せずに判定とページ画像を確認する")
     d.add_argument("--settings", help="settings.toml のパス")
@@ -158,6 +180,11 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--stable-check", action="store_true", help="書き込み中チェックも行う（数秒待つ）")
     pr.add_argument("--allow-fax", action="store_true", help="FAXドライバーへの出力を許可する（settings.toml の print.mode が test の時のみ有効）")
     pr.set_defaults(func=cmd_print)
+
+    ins = sub.add_parser("inspect", help="プリンタードライバーの対応状況を読む（Windowsのみ。印刷・送信はしない）")
+    ins.add_argument("--printer", required=True, help='例: "FUJIFILM Apeos C2360 FAX"')
+    ins.add_argument("--out", default="out/inspect.txt", help="結果の保存先（既定: out/inspect.txt）")
+    ins.set_defaults(func=cmd_inspect)
     args = parser.parse_args(argv)
     return args.func(args)
 
