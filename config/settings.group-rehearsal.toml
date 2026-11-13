@@ -4,7 +4,7 @@
 
 [print]
 mode = 'production'
-printer_name = 'FUJIFILM Apeos C2360 FAX'
+printer_name = 'FAX'
 
 [fax]
 # テスト送信先（Brother FAXテストサービス。186＝発信者番号を通知）

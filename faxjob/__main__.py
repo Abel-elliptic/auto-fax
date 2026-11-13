@@ -76,6 +76,16 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_installed_printers() -> None:
+    from .printer_win import format_printer_list, list_printers
+
+    try:
+        for line in format_printer_list(list_printers()):
+            print(line, file=sys.stderr)
+    except Exception as exc:
+        print(f"（プリンター一覧を取得できません: {exc}）", file=sys.stderr)
+
+
 def _start_dialog_operator(settings, rehearsal: bool, stem: str, box: dict):
     """FAXドライバーの送信画面を別スレッドで待ち受けて操作する（印刷処理は画面が閉じるまで止まるため）。"""
     import os
@@ -113,6 +123,7 @@ def cmd_print(args: argparse.Namespace) -> int:
         driver = printer_driver_name(printer)
     except Exception as exc:
         print(f"プリンター「{printer}」が見つかりません: {exc}", file=sys.stderr)
+        _print_installed_printers()
         return 2
     if looks_like_fax(printer, driver):
         allowed = args.allow_fax and (settings.mode == "test" or (args.rehearsal and settings.mode == "production"))
@@ -229,6 +240,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         import traceback
         print(f"プリンター「{args.printer}」を調べられません: {type(exc).__name__}: {exc}", file=sys.stderr)
         traceback.print_exc()
+        _print_installed_printers()
         return 2
     text = "\n".join(["（読み取りのみ。印刷ジョブは作っていません＝FAXは送信されていません）", ""] + format_inspection(ins))
     print(text)

@@ -99,6 +99,22 @@ class PrinterError(RuntimeError):
     pass
 
 
+def format_printer_list(printers: list[tuple[str, str]]) -> list[str]:
+    """インストール済みプリンター（名前, ドライバー名）の一覧を、FAXドライバーに印を付けて行にする。"""
+    lines = ["インストール済みのプリンター（* = FAXドライバー。--printer にはこの「名前」を指定）:"]
+    for name, driver in sorted(printers):
+        mark = "*" if looks_like_fax(name, driver) else " "
+        lines.append(f"  {mark} 名前: {name}  （ドライバー: {driver}）")
+    return lines
+
+
+def list_printers() -> list[tuple[str, str]]:
+    import win32print
+
+    flags = 2 | 4  # PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
+    return [(p["pPrinterName"], p["pDriverName"]) for p in win32print.EnumPrinters(flags, None, 2)]
+
+
 def printer_driver_name(printer: str) -> str:
     import win32print
 

@@ -92,3 +92,12 @@ def test_fax_request_problems():
     [msg] = fax_request_problems("a.pdf", 4, 3)
     assert "上限 3" in msg
     assert len(fax_request_problems("", 9, 3)) == 2
+
+
+def test_format_printer_list():
+    from faxjob.printer_win import format_printer_list
+    lines = format_printer_list([("FUJIFILM Apeos C2360", "FF Apeos C2360"),
+                                 ("FAX", "FF Direct Fax Driver"),
+                                 ("Microsoft Print to PDF", "Microsoft Print To PDF")])
+    assert "  * 名前: FAX  （ドライバー: FF Direct Fax Driver）" in lines
+    assert "    名前: FUJIFILM Apeos C2360  （ドライバー: FF Apeos C2360）" in lines
