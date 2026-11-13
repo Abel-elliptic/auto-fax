@@ -15,6 +15,9 @@ param(
 $ErrorActionPreference = 'Continue'
 $lines = New-Object System.Collections.Generic.List[string]
 $faxPattern = 'FAX|Fax|fax|ファクス|ファックス|ART EX|FUJIFILM|Apeos|Fuji'
+# FAXドライバーと判定する条件（faxjob/printer_win.py の looks_like_fax と同じ考え方）
+$faxOnlyPattern = '(?i)fax|ファクス|ファックス|art ex'
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 function Write-Line([string]$text = '', [string]$color = '') {
     $lines.Add($text)
@@ -53,13 +56,17 @@ Write-Section 'プリンター一覧（* = FAX/富士フイルム関連の可能
 try {
     $printers = Get-Printer | Sort-Object Name | Select-Object Name, DriverName, PortName, Type
     Write-Table $printers $faxPattern
-    $faxPrinters = @($printers | Where-Object { ($_.Name + ' ' + $_.DriverName) -match $faxPattern })
+    $fujiPrinters = @($printers | Where-Object { ($_.Name + ' ' + $_.DriverName) -match $faxPattern })
+    $faxPrinters = @($fujiPrinters | Where-Object { ($_.Name + ' ' + $_.DriverName) -match $faxOnlyPattern })
+    $paperPrinters = @($fujiPrinters | Where-Object { ($_.Name + ' ' + $_.DriverName) -notmatch $faxOnlyPattern })
+    Write-Line ''
     if ($faxPrinters.Count -gt 0) {
-        Write-Line ''
-        Write-Line ('  → FAX/富士フイルム関連らしいプリンター: ' + (($faxPrinters | ForEach-Object { $_.Name }) -join ' / ')) 'Yellow'
+        Write-Line ('  → FAXドライバーらしいプリンター: ' + (($faxPrinters | ForEach-Object { $_.Name }) -join ' / ')) 'Yellow'
     } else {
-        Write-Line ''
-        Write-Line '  → FAX/富士フイルム関連のプリンターは見つかりませんでした。ドライバーの導入が必要な可能性があります。' 'Yellow'
+        Write-Line '  → 名前・ドライバー名に FAX/ファクス/ART EX を含むプリンターはありません。ダイレクトファクスドライバーは未導入の可能性があります。' 'Yellow'
+    }
+    foreach ($pp in $paperPrinters) {
+        Write-Line ('  → 「' + $pp.Name + '」は紙に印刷するプリンターと思われます。faxjob print で指定すると紙が出ます（FAXは出ません）。') 'Yellow'
     }
     if ($printers | Where-Object { $_.Name -eq 'Microsoft Print to PDF' }) {
         Write-Line '  → 「Microsoft Print to PDF」あり（Step 2 の確認に使います）' 'Green'
@@ -105,10 +112,14 @@ try {
     (powercfg /q SCHEME_CURRENT SUB_SLEEP RTCWAKE 2>&1 | Out-String).TrimEnd() -split "`r?`n" | ForEach-Object { Write-Line ('    ' + $_) }
     Write-Line '    （0x00000000=無効 / 0x00000001=有効 / 0x00000002=重要なタイマーのみ。AC=電源接続時、DC=バッテリー時）'
 } catch { Write-Line ('  取得できません: ' + $_.Exception.Message) 'Red' }
-try {
-    Write-Line '  [現在のスリープ解除タイマー] powercfg /waketimers'
-    (powercfg /waketimers 2>&1 | Out-String).TrimEnd() -split "`r?`n" | ForEach-Object { Write-Line ('    ' + $_) }
-} catch { Write-Line ('  取得できません（管理者権限が必要な場合があります）: ' + $_.Exception.Message) 'Red' }
+Write-Line '  [現在のスリープ解除タイマー] powercfg /waketimers'
+if ($isAdmin) {
+    try {
+        (powercfg /waketimers 2>&1 | Out-String).TrimEnd() -split "`r?`n" | ForEach-Object { Write-Line ('    ' + $_) }
+    } catch { Write-Line ('    取得できません: ' + $_.Exception.Message) 'Red' }
+} else {
+    Write-Line '    （管理者権限が必要なため省略。見る場合は PowerShell を「管理者として実行」してこのスクリプトを実行）'
+}
 
 Write-Line ''
 if (Test-Path -LiteralPath $LogDir) {

@@ -50,6 +50,37 @@ py -m faxjob print --printer "Microsoft Print to PDF" --input samples\送信 --m
 
 - 結果は `out\print_test\` に元ファイルごとのPDFと `print_result.txt`（ページごとの要求用紙と、プリンターが実際に用意した用紙）として出る。
 - FAXドライバーらしいプリンターを指定すると、`print.mode = 'test'` かつ `--allow-fax` の時以外は出力を拒否する。
+- ⚠ 「FUJIFILM Apeos C2360」（ドライバー FF Apeos C2360）は**紙に印刷するプリンター**。指定すると紙が出る（FAXは出ない）ので、Step 2 では指定しない。
+
+## スリープからの自動復帰テスト（Windows）
+
+このPCには従来のスリープ（S3）が無く、「モダンスタンバイ」と「休止状態」のみ。
+モダンスタンバイ中にタスクスケジューラで起きるかは公式に確認できないため、実際に試す。FAX送信や印刷はしない。
+
+**事前準備（電源設定・手動）**：スリープ解除タイマーを有効にする
+1. スタートメニューで「電源プランの編集」を検索して開く →「詳細な電源設定の変更」
+2. 「スリープ」→「スリープ解除タイマーの許可」→「電源に接続」を **有効** にして OK
+
+**テスト**（電源ケーブルはつないだまま）
+
+```
+powershell -ExecutionPolicy Bypass -File tools\wake_test.ps1 -Register -Minutes 10
+```
+
+表示された予定時刻より前に、スタート → 電源 → スリープ。予定時刻を数分過ぎるまで触らない。その後PCを起こして確認：
+
+```
+powershell -ExecutionPolicy Bypass -File tools\wake_test.ps1 -Check
+```
+
+終わったらテスト用タスクを削除：
+
+```
+powershell -ExecutionPolicy Bypass -File tools\wake_test.ps1 -Remove
+```
+
+- テスト用タスク（`\FAX\FAX_wake_test`）がすることは `C:\FAX\ログ\wake_test.log` に時刻を1行書くことだけ。
+- 起きなかった場合の代替案：スリープさせず画面だけ消す運用（電源接続時のスリープ＝なし）、または休止状態からの復帰を試す。
 
 ## テスト
 
