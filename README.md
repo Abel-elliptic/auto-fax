@@ -84,6 +84,34 @@ py -m faxjob print --settings config\settings.test.toml --allow-fax --only 請�
 - 送る直前にファイル名・ページ数・用紙を表示し、キーボードで「送信」と入力した時だけ送る。
 - プログラムが確認できるのは「FAXドライバーへの投入」まで。実際に送れたかは通信管理レポートで確認する。
 
+## 送信画面の自動操作（Windows）
+
+FAXドライバーへ出力すると「ファクス送信の設定／確認」画面が出る。プログラムがこの画面を操作して宛先を設定し、「送信開始」を押す。
+**座標は使わない**：部品は ID で特定し、ボタンは WM_COMMAND(BN_CLICKED)、文字は EM_REPLACESEL、リストは LVM_* メッセージで操作する。
+操作のたびに画面を読み直して確認し、想定外なら「送信中止」を押して止める（印刷設定の既定宛先が残っている、宛先が2件以上、時刻指定がオン、など）。
+
+**① リハーサル（送信しない）**：宛先の設定まで自動で行い、最後は「送信中止」を押す
+
+```
+py -m faxjob print --settings config\settings.test.toml --allow-fax --rehearsal --only 請求書.pdf --input samples\送信 --master samples\master.csv
+```
+
+本番宛先「一斉2」の選択だけを確かめる（宛先表で「一斉2」(Group) を完全一致で選ぶ。「一斉」とは区別。送信中止で終わる）：
+
+```
+py -m faxjob print --settings config\settings.group-rehearsal.toml --allow-fax --rehearsal --only 請求書.pdf --input samples\送信 --master samples\master.csv
+```
+
+**② テスト送信**：Brother テストサービス（`1860528244773`）へ1ファイル送る（キーボードで「送信」と入力した時だけ）
+
+```
+py -m faxjob print --settings config\settings.test.toml --allow-fax --only 請求書.pdf --input samples\送信 --master samples\master.csv
+```
+
+- 事前に FAXドライバーの印刷設定の「宛先の一覧」を**空**にしておく（入っていると安全のため中止する）。
+- 押す直前の画面の画像は `C:\FAX\ログ\fax_gui\` に保存される。
+- 本番（`mode='production'`）での送信は Step 8 まで無効（`--rehearsal` のみ可）。
+
 ## 送信時のFAX宛先画面の構造を読む（Windows、送信なし）
 
 FAXドライバーへ印刷すると宛先を選ぶ画面が出る（本体宛先表の「一斉2」はこの画面でしか選べない）。

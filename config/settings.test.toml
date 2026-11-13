@@ -6,6 +6,14 @@
 mode = 'test'
 printer_name = 'FUJIFILM Apeos C2360 FAX'
 
+[fax]
+# テスト送信先（Brother FAXテストサービス。186＝発信者番号を通知）
+test_number = '1860528244773'
+# 本番の宛先グループ名（本体宛先表の名前と完全一致。「一斉」とは別）
+group_name = '一斉2'
+# FAXドライバーの送信画面が出るまで待つ秒数
+dialog_timeout = 60
+
 [render]
 dpi = 200
 margin_mm = 5

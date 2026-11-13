@@ -1,0 +1,22 @@
+# 本番宛先（一斉2）の「選択だけ」を確かめるリハーサル用設定。
+# 必ず --rehearsal を付けて使う（宛先の設定まで行い「送信中止」で終わる＝送信しない）。
+# --rehearsal 無しで mode=production の送信はプログラム側で拒否される（Step 8 まで無効）。
+
+[print]
+mode = 'production'
+printer_name = 'FUJIFILM Apeos C2360 FAX'
+
+[fax]
+# テスト送信先（Brother FAXテストサービス。186＝発信者番号を通知）
+test_number = '1860528244773'
+# 本番の宛先グループ名（本体宛先表の名前と完全一致。「一斉」とは別）
+group_name = '一斉2'
+# FAXドライバーの送信画面が出るまで待つ秒数
+dialog_timeout = 60
+
+[render]
+dpi = 200
+margin_mm = 5
+mono_mode = 'text'
+threshold = 160
+pdf_layout = 'auto'

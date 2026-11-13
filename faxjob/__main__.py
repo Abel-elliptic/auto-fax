@@ -76,6 +76,28 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _start_dialog_operator(settings, rehearsal: bool, stem: str, box: dict):
+    """FAXドライバーの送信画面を別スレッドで待ち受けて操作する（印刷処理は画面が閉じるまで止まるため）。"""
+    import os
+    import threading
+    from datetime import datetime
+
+    from .sender_gui import operate_dialog
+
+    shot_dir = settings.preview_dir.parent / "fax_gui"
+    shot_dir.mkdir(parents=True, exist_ok=True)
+    shot = shot_dir / f"{datetime.now():%Y%m%d_%H%M%S}_{stem}.png"
+
+    def run():
+        box["result"] = operate_dialog(
+            mode=settings.mode, test_number=settings.fax_test_number, group_name=settings.fax_group_name,
+            rehearsal=rehearsal, timeout=settings.fax_dialog_timeout, pid=os.getpid(), shot=shot)
+
+    th = threading.Thread(target=run, name="fax-dialog", daemon=True)
+    th.start()
+    return th
+
+
 def cmd_print(args: argparse.Namespace) -> int:
     settings = load_settings(Path(args.settings) if args.settings else None)
     printer = args.printer or settings.printer_name
@@ -93,15 +115,19 @@ def cmd_print(args: argparse.Namespace) -> int:
         print(f"プリンター「{printer}」が見つかりません: {exc}", file=sys.stderr)
         return 2
     if looks_like_fax(printer, driver):
-        if not args.allow_fax or settings.mode != "test":  # 本番送信の仕組み（Step 4以降）ができるまでは test のみ
-            print(f"「{printer}」（ドライバー: {driver}）はFAXドライバーの可能性があるため出力しません。\n"
-                  "テスト宛先が決まり、settings.toml の print.mode を test にしたうえで --allow-fax を付けた時だけ出力します。\n"
-                  "（宛先グループ「一斉2」は社外の複数社に届くため、テストでは絶対に使わないでください）", file=sys.stderr)
+        allowed = args.allow_fax and (settings.mode == "test" or (args.rehearsal and settings.mode == "production"))
+        if not allowed:
+            if settings.mode == "production" and not args.rehearsal:
+                reason = "本番（一斉2）への送信は Step 8 まで無効です。宛先選択の確認だけなら --rehearsal を付けてください（送信中止で終わります）。"
+            else:
+                reason = "settings.toml の print.mode を test にしたうえで --allow-fax を付けた時だけ出力します。"
+            print(f"「{printer}」（ドライバー: {driver}）はFAXドライバーのため出力しません。\n{reason}\n"
+                  "（宛先グループ「一斉2」は社外の複数社に届くため、テストでは使わないでください）", file=sys.stderr)
             return 3
         for msg in fax_request_problems(args.only, None, args.max_pages):
             print(msg, file=sys.stderr)
             return 3
-        print(f"[注意] FAXドライバー「{printer}」へ出力します（mode={settings.mode}）。宛先がテスト宛先であることを確認してください。")
+        print(f"[注意] FAXドライバー「{printer}」へ出力します（mode={settings.mode}{'、リハーサル＝送信しない' if args.rehearsal else ''}）。")
     is_fax = looks_like_fax(printer, driver)
 
     src = Path(args.input) if args.input else settings.send_dir
@@ -129,16 +155,46 @@ def cmd_print(args: argparse.Namespace) -> int:
             print(f"ファイル  : {c.path.name}（{len(r.pages)}ページ）")
             for pg in r.pages:
                 print(f"  {pg.number}ページ: {pg.paper.label()}")
-            print("宛先は FAXドライバーの「印刷設定」の宛先、または表示されるダイアログで決まります。")
-            print("宛先がテスト宛先（例: 1860528244773）であり、「一斉2」でないことを確認してください。")
-            if input(f"送信してよければ「{CONFIRM_WORD}」と入力して Enter: ").strip() != CONFIRM_WORD:
+            if settings.mode == "test":
+                print(f"宛先：プログラムが送信画面でテスト番号 {settings.fax_test_number} を1件だけ設定します。")
+            else:
+                print(f"宛先：プログラムが送信画面で宛先表の「{settings.fax_group_name}」を選びます。")
+            if args.rehearsal:
+                print("リハーサル：宛先の設定まで行い、最後は「送信中止」を押します（送信しません）。")
+            elif input(f"送信してよければ「{CONFIRM_WORD}」と入力して Enter: ").strip() != CONFIRM_WORD:
                 summary.append(f"[中止] {c.path.name}: 確認の入力が「{CONFIRM_WORD}」ではなかったため送信しませんでした")
                 continue
         output_file = (out_dir / f"{c.path.stem}.pdf").resolve() if is_pdf_printer else None
+        gui_box: dict = {}
+        gui_thread = None
+        if is_fax:
+            gui_thread = _start_dialog_operator(settings, args.rehearsal, c.path.stem, gui_box)
         try:
             results = print_pages(printer, r.pages, f"FAX {c.path.name}", settings.render.margin_mm, output_file)
-        except Exception as exc:  # PrinterError やドライバーのエラー
-            summary.append(f"[失敗] {c.path.name}: {exc}")
+            print_error = ""
+        except Exception as exc:  # PrinterError やドライバーのエラー（送信中止を押した場合もここに来る）
+            results, print_error = [], str(exc)
+        if gui_thread is not None:
+            gui_thread.join(timeout=settings.fax_dialog_timeout + 60)
+            gui = gui_box.get("result")
+            if gui is None:
+                summary.append(f"[要確認] {c.path.name}: 送信画面の自動操作が終わっていません。画面を確認してください")
+                problems += 1
+                continue
+            summary += [f"    {line}" for line in gui.log]
+            if gui.error:
+                summary.append(f"[送信していません] {c.path.name}: {gui.error}")
+                problems += 1
+                continue
+            if args.rehearsal:
+                summary.append(f"[リハーサル完了] {c.path.name}: 宛先の設定まで成功し、送信中止しました（送信していません）")
+                continue
+            if not gui.sent:
+                summary.append(f"[送信していません] {c.path.name}: 送信画面が出ませんでした")
+                problems += 1
+                continue
+        if print_error:
+            summary.append(f"[失敗] {c.path.name}: {print_error}")
             problems += 1
             continue
         printed += 1
@@ -227,6 +283,8 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--only", help="このファイル名だけ出力する（例: 請求書.pdf）")
     pr.add_argument("--output-dir", help="Microsoft Print to PDF の保存先（既定: 設定の base_dir\\ログ\\print_test）")
     pr.add_argument("--stable-check", action="store_true", help="書き込み中チェックも行う（数秒待つ）")
+    pr.add_argument("--rehearsal", action="store_true",
+                    help="FAXの送信画面で宛先の設定まで自動で行い、最後は「送信中止」を押す（送信しない）")
     pr.add_argument("--max-pages", type=int, default=3, help="FAXへ出力するときのページ数上限（既定: 3）")
     pr.add_argument("--allow-fax", action="store_true", help="FAXドライバーへの出力を許可する（settings.toml の print.mode が test の時のみ有効）")
     pr.set_defaults(func=cmd_print)

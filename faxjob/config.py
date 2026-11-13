@@ -15,6 +15,9 @@ class Settings:
     stable_wait_seconds: float = 3.0
     mode: str = "demo"               # demo / test / production
     printer_name: str = ""
+    fax_test_number: str = "1860528244773"   # Brother FAXテストサービス（186=番号通知）
+    fax_group_name: str = "一斉2"
+    fax_dialog_timeout: float = 60.0
     render: RenderOptions = field(default_factory=RenderOptions)
 
     @property
@@ -49,6 +52,10 @@ def load_settings(path: Path | None) -> Settings:
     s.printer_name = str(pr.get("printer_name", s.printer_name))
     if s.mode not in ("demo", "test", "production"):
         raise ValueError(f"print.mode は demo/test/production のどれか: {s.mode}")
+    fx = data.get("fax", {})
+    s.fax_test_number = str(fx.get("test_number", s.fax_test_number))
+    s.fax_group_name = str(fx.get("group_name", s.fax_group_name))
+    s.fax_dialog_timeout = float(fx.get("dialog_timeout", s.fax_dialog_timeout))
     r = data.get("render", {})
     opt = s.render
     opt.dpi = int(r.get("dpi", opt.dpi))
