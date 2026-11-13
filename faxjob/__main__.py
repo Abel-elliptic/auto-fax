@@ -147,7 +147,9 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     try:
         ins = inspect_printer(args.printer)
     except Exception as exc:
-        print(f"プリンター「{args.printer}」を調べられません: {exc}", file=sys.stderr)
+        import traceback
+        print(f"プリンター「{args.printer}」を調べられません: {type(exc).__name__}: {exc}", file=sys.stderr)
+        traceback.print_exc()
         return 2
     text = "\n".join(["（読み取りのみ。印刷ジョブは作っていません＝FAXは送信されていません）", ""] + format_inspection(ins))
     print(text)

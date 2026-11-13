@@ -182,6 +182,23 @@ class Inspection:
     trials: list[tuple[Paper, int | None, int | None, str]]  # 要求 → 受け入れ値(用紙コード, 向き), エラー
 
 
+def pair_of(value) -> tuple[int, int] | None:
+    """pywin32 が返す2つ組の値を (横, 縦) にする。
+
+    pywin32 は用紙寸法を {"x":..,"y":..}、解像度を {"xdpi":..,"ydpi":..} の辞書で返す（版によって形が違う可能性もあるため幅広く受ける）。
+    """
+    if isinstance(value, dict):
+        for kx, ky in (("x", "y"), ("xdpi", "ydpi"), ("cx", "cy")):
+            if kx in value and ky in value:
+                return (int(value[kx]), int(value[ky]))
+        return None
+    try:
+        a, b = value
+        return (int(a), int(b))
+    except (TypeError, ValueError):
+        return None
+
+
 def format_inspection(ins: Inspection) -> list[str]:
     """調査結果を日本語の行にする（Windowsに依存しない部分。単体テスト対象）。"""
     pname = lambda c: PAPER_CODE_NAMES.get(c, f"コード{c}") if c is not None else "不明"
@@ -242,16 +259,10 @@ def inspect_printer(printer: str) -> Inspection:
     sizes = list(caps(DC_PAPERSIZE) or [])
     papers = []
     for i, code in enumerate(codes):
-        name = names[i].strip("\x00 ") if i < len(names) else ""
-        size = None
-        if i < len(sizes):
-            s = sizes[i]
-            size = (s["x"], s["y"]) if isinstance(s, dict) else tuple(s)
+        name = str(names[i]).strip("\x00 ") if i < len(names) else ""
+        size = pair_of(sizes[i]) if i < len(sizes) else None
         papers.append((int(code), name, size))
-    res_raw = caps(DC_ENUMRESOLUTIONS) or []
-    resolutions = []
-    for r in res_raw:
-        resolutions.append((r["x"], r["y"]) if isinstance(r, dict) else tuple(r))
+    resolutions = [r for r in (pair_of(v) for v in (caps(DC_ENUMRESOLUTIONS) or [])) if r]
     rot = caps(DC_ORIENTATION)
 
     quality = "不明"

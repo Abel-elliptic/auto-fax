@@ -72,3 +72,12 @@ def test_format_inspection_missing_a3():
     ins = Inspection("P", "D", "X", None, None, "不明", [(9, "A4", None)], [], None, [])
     text = "\n".join(format_inspection(ins))
     assert "A3: 一覧に無い（要確認）" in text and "既定の設定: 用紙 不明" in text
+
+
+def test_pair_of_handles_pywin32_shapes():
+    from faxjob.printer_win import pair_of
+    assert pair_of({"x": 2100, "y": 2970}) == (2100, 2970)       # DC_PAPERSIZE
+    assert pair_of({"xdpi": 200, "ydpi": 100}) == (200, 100)     # DC_ENUMRESOLUTIONS
+    assert pair_of({"cx": 1, "cy": 2}) == (1, 2)
+    assert pair_of((300, 300)) == (300, 300)
+    assert pair_of({"h": 1}) is None and pair_of(None) is None
