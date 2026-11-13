@@ -98,7 +98,8 @@ py -m pip install -r requirements.txt
 py -m faxjob uidump
 ```
 
-4. 結果（`out\uidump_日時.txt` と画面の画像）を共有したら、宛先の画面は「キャンセル」で閉じる
+4. 続けて、その画面の「宛先表から追加」を押し、宛先表（「一斉2」が見える状態）が出たら**何も選ばず**もう一度 `py -m faxjob uidump`
+5. 2つの結果（`out\uidump_日時.txt` と画面の画像）を共有したら、両方の画面を「キャンセル」で閉じる
 
 ## 紙のレポートを止めるには
 
