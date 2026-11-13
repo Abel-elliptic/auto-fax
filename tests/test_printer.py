@@ -81,3 +81,14 @@ def test_pair_of_handles_pywin32_shapes():
     assert pair_of({"cx": 1, "cy": 2}) == (1, 2)
     assert pair_of((300, 300)) == (300, 300)
     assert pair_of({"h": 1}) is None and pair_of(None) is None
+
+
+def test_fax_request_problems():
+    from faxjob.printer_win import fax_request_problems
+    assert fax_request_problems("請求書.pdf", 2, 3) == []
+    assert fax_request_problems("請求書.pdf", None, 3) == []
+    [msg] = fax_request_problems(None, 1, 3)
+    assert "--only" in msg
+    [msg] = fax_request_problems("a.pdf", 4, 3)
+    assert "上限 3" in msg
+    assert len(fax_request_problems("", 9, 3)) == 2

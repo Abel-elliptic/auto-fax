@@ -1,0 +1,14 @@
+# FAXテスト送信用の設定（Step 3）
+# 宛先はFAXドライバー側（印刷設定の宛先／送信時のダイアログ）で決まる。
+# ⚠ 宛先がテスト宛先（例: Brother テストサービス 1860528244773）であることを必ず確認する。「一斉2」は使わない。
+
+[print]
+mode = 'test'
+printer_name = 'FUJIFILM Apeos C2360 FAX'
+
+[render]
+dpi = 200
+margin_mm = 5
+mono_mode = 'text'
+threshold = 160
+pdf_layout = 'auto'

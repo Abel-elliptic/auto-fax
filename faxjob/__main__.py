@@ -84,7 +84,7 @@ def cmd_print(args: argparse.Namespace) -> int:
     if sys.platform != "win32":
         print("print コマンドは Windows でのみ動きます", file=sys.stderr)
         return 2
-    from .printer_win import looks_like_fax, print_pages, printer_driver_name
+    from .printer_win import CONFIRM_WORD, fax_request_problems, looks_like_fax, print_pages, printer_driver_name
 
     try:
         driver = printer_driver_name(printer)
@@ -97,7 +97,11 @@ def cmd_print(args: argparse.Namespace) -> int:
                   "テスト宛先が決まり、settings.toml の print.mode を test にしたうえで --allow-fax を付けた時だけ出力します。\n"
                   "（宛先グループ「一斉2」は社外の複数社に届くため、テストでは絶対に使わないでください）", file=sys.stderr)
             return 3
+        for msg in fax_request_problems(args.only, None, args.max_pages):
+            print(msg, file=sys.stderr)
+            return 3
         print(f"[注意] FAXドライバー「{printer}」へ出力します（mode={settings.mode}）。宛先がテスト宛先であることを確認してください。")
+    is_fax = looks_like_fax(printer, driver)
 
     src = Path(args.input) if args.input else settings.send_dir
     master = load_master(Path(args.master) if args.master else settings.master_path)
@@ -113,6 +117,22 @@ def cmd_print(args: argparse.Namespace) -> int:
         if not r.pages:
             summary.append(f"[出力しない] {c.path.name}: {r.error or c.status + ' ' + c.reason}")
             continue
+        if is_fax:
+            problems_fax = fax_request_problems(args.only, len(r.pages), args.max_pages)
+            if problems_fax:
+                summary.append(f"[出力しない] {c.path.name}: " + "、".join(problems_fax))
+                problems += 1
+                continue
+            print("\n=== FAX送信の確認 ===")
+            print(f"プリンター: {printer}")
+            print(f"ファイル  : {c.path.name}（{len(r.pages)}ページ）")
+            for pg in r.pages:
+                print(f"  {pg.number}ページ: {pg.paper.label()}")
+            print("宛先は FAXドライバーの「印刷設定」の宛先、または表示されるダイアログで決まります。")
+            print("宛先がテスト宛先（例: 1860528244773）であり、「一斉2」でないことを確認してください。")
+            if input(f"送信してよければ「{CONFIRM_WORD}」と入力して Enter: ").strip() != CONFIRM_WORD:
+                summary.append(f"[中止] {c.path.name}: 確認の入力が「{CONFIRM_WORD}」ではなかったため送信しませんでした")
+                continue
         output_file = (out_dir / f"{c.path.stem}.pdf").resolve() if is_pdf_printer else None
         try:
             results = print_pages(printer, r.pages, f"FAX {c.path.name}", settings.render.margin_mm, output_file)
@@ -122,6 +142,8 @@ def cmd_print(args: argparse.Namespace) -> int:
             continue
         printed += 1
         summary.append(f"[出力] {c.path.name}" + (f" → {output_file}" if output_file else ""))
+        if is_fax:
+            summary.append("    ※FAXドライバーへの投入まで完了。実際に送れたかは、本体の通信管理レポート／ジョブ情報で確認してください。")
         for pr in results:
             w, h = pr.device_mm
             ux, uy = pr.unprintable_mm
@@ -180,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--only", help="このファイル名だけ出力する（例: 請求書.pdf）")
     pr.add_argument("--output-dir", help="Microsoft Print to PDF の保存先（既定: 設定の base_dir\\ログ\\print_test）")
     pr.add_argument("--stable-check", action="store_true", help="書き込み中チェックも行う（数秒待つ）")
+    pr.add_argument("--max-pages", type=int, default=3, help="FAXへ出力するときのページ数上限（既定: 3）")
     pr.add_argument("--allow-fax", action="store_true", help="FAXドライバーへの出力を許可する（settings.toml の print.mode が test の時のみ有効）")
     pr.set_defaults(func=cmd_print)
 

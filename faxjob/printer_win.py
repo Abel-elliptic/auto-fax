@@ -30,6 +30,19 @@ PHYSICALOFFSETX, PHYSICALOFFSETY = 112, 113
 FAX_PATTERN = re.compile(r"fax|ファクス|ファックス|art ex", re.IGNORECASE)
 
 
+CONFIRM_WORD = "送信"
+
+
+def fax_request_problems(only: str | None, page_count: int | None, max_pages: int) -> list[str]:
+    """FAXドライバーへ出力してよいかの事前チェック（テスト送信用の安全装置）。問題があれば日本語で返す。"""
+    problems = []
+    if not only:
+        problems.append("FAXへ出力するときは --only で1ファイルだけ指定してください（例: --only 請求書.pdf）")
+    if page_count is not None and page_count > max_pages:
+        problems.append(f"ページ数 {page_count} が上限 {max_pages} を超えています（--max-pages で変更可）")
+    return problems
+
+
 def looks_like_fax(printer_name: str, driver_name: str) -> bool:
     return bool(FAX_PATTERN.search(printer_name) or FAX_PATTERN.search(driver_name))
 
