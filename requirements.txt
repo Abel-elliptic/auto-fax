@@ -2,3 +2,4 @@
 Pillow>=10
 pypdfium2>=4
 pywin32>=306; sys_platform == "win32"   # print コマンド（Windowsの印刷）で使う
+pywinauto>=0.6.8; sys_platform == "win32"   # uidump（送信時の画面の構造を読む）で使う

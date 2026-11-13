@@ -3,6 +3,7 @@
   python -m faxjob demo  [--settings 設定.toml] [--input フォルダ] [--master マスタ.csv] [--out 出力先]
   python -m faxjob print [--settings 設定.toml] [--printer プリンター名] [--only ファイル名] [--output-dir 出力先]
   python -m faxjob inspect --printer プリンター名 [--out 結果ファイル]
+  python -m faxjob uidump [--title 画面タイトルの正規表現]
 
 demo  は送信フォルダを読み、判定とFAX用ページ画像を作ってHTMLで表示する。FAXは送信しない。
 print は同じページ画像を、ページごとに用紙・向きを指定してプリンターへ出力する（Windowsのみ）。
@@ -182,8 +183,32 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_uidump(args: argparse.Namespace) -> int:
+    if sys.platform != "win32":
+        print("uidump コマンドは Windows でのみ動きます", file=sys.stderr)
+        return 2
+    from datetime import datetime
+
+    from .uidump_win import dump
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        lines = dump(args.title, out_dir / f"uidump_{stamp}.png")
+    except ImportError:
+        print("pywinauto が入っていません。 py -m pip install -r requirements.txt を実行してください。", file=sys.stderr)
+        return 2
+    text = "\n".join(["（読み取りのみ。クリック・入力はしていません＝FAXは送信されていません）", ""] + lines)
+    out = out_dir / f"uidump_{stamp}.txt"
+    out.write_text(text + "\n", encoding="utf-8")
+    print(text)
+    print(f"\n結果: {out.resolve()}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="faxjob", description="FAX定期自動送信（開発中：demo / print / inspect のみ。定期送信は未実装）")
+    parser = argparse.ArgumentParser(prog="faxjob", description="FAX定期自動送信（開発中：demo / print / inspect / uidump のみ。定期送信は未実装）")
     sub = parser.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("demo", help="送信せずに判定とページ画像を確認する")
     d.add_argument("--settings", help="settings.toml のパス")
@@ -210,6 +235,12 @@ def main(argv: list[str] | None = None) -> int:
     ins.add_argument("--printer", required=True, help='例: "FUJIFILM Apeos C2360 FAX"')
     ins.add_argument("--out", default="out/inspect.txt", help="結果の保存先（既定: out/inspect.txt）")
     ins.set_defaults(func=cmd_inspect)
+
+    ud = sub.add_parser("uidump", help="送信時のFAX宛先画面の構造を読む（Windowsのみ。クリック・入力はしない）")
+    ud.add_argument("--title", default=r"fax|ファクス|ファックス|宛先|apeos",
+                    help="対象画面のタイトルに含まれる文字（正規表現。既定: FAX/ファクス/宛先/Apeos）")
+    ud.add_argument("--out-dir", default="out", help="結果の保存先フォルダ（既定: out）")
+    ud.set_defaults(func=cmd_uidump)
     args = parser.parse_args(argv)
     return args.func(args)
 
