@@ -10,6 +10,13 @@ master_file = 'master.csv'
 # ファイルが書き込み中でないか確かめるため、この秒数をおいてサイズ・更新時刻を2回比べる
 stable_wait_seconds = 3
 
+[print]
+# demo = 送信しない（FAXドライバーへの出力は拒否） / test = テスト宛先で確認中 / production = 本番
+mode = 'demo'
+# 出力先プリンター名（Windowsの「プリンターとスキャナー」に表示される名前）
+# Step 2 では 'Microsoft Print to PDF' を使う
+printer_name = 'Microsoft Print to PDF'
+
 [render]
 # FAX用に画像化するときの解像度。実機で 200/300/400 を比べて決める
 dpi = 200

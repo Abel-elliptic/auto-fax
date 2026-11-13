@@ -13,6 +13,8 @@ class Settings:
     base_dir: Path = Path(r"C:\FAX")
     master_file: Path | None = None
     stable_wait_seconds: float = 3.0
+    mode: str = "demo"               # demo / test / production
+    printer_name: str = ""
     render: RenderOptions = field(default_factory=RenderOptions)
 
     @property
@@ -42,6 +44,11 @@ def load_settings(path: Path | None) -> Settings:
         s.master_file = mf if mf.is_absolute() else path.parent / mf
     scan = data.get("scan", {})
     s.stable_wait_seconds = float(scan.get("stable_wait_seconds", s.stable_wait_seconds))
+    pr = data.get("print", {})
+    s.mode = str(pr.get("mode", s.mode))
+    s.printer_name = str(pr.get("printer_name", s.printer_name))
+    if s.mode not in ("demo", "test", "production"):
+        raise ValueError(f"print.mode は demo/test/production のどれか: {s.mode}")
     r = data.get("render", {})
     opt = s.render
     opt.dpi = int(r.get("dpi", opt.dpi))
